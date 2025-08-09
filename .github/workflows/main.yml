@@ -4,93 +4,17 @@ on:
   workflow_dispatch:
 
 jobs:
-  start-server:
+  get-claim-code:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Checkout Repository Files
-        uses: actions/checkout@v4
-
-      - name: 2. Setup Java 17 Environment
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: 3. Configure Rclone
-        env:
-          ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
-          REFRESH_TOKEN: ${{ secrets.RCLONE_REFRESH_TOKEN }}
-          TOKEN_TYPE: ${{ secrets.RCLONE_TOKEN_TYPE }}
-          EXPIRY: ${{ secrets.RCLONE_EXPIRY }}
+      - name: 1. Install and Run playit.gg to get Claim Code
         run: |
-          echo "Setting up Rclone..."
-          sudo curl https://rclone.org/install.sh | sudo bash
-          mkdir -p ~/.config/rclone
-          
-          TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' \
-            "$ACCESS_TOKEN" \
-            "$TOKEN_TYPE" \
-            "$REFRESH_TOKEN" \
-            "$EXPIRY" \
-          )
-          
-          echo "[gdrive]" > ~/.config/rclone/rclone.conf
-          echo "type = drive" >> ~/.config/rclone/rclone.conf
-          echo "scope = drive" >> ~/.config/rclone/rclone.conf
-          echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
-          echo "Rclone configured."
-          
-      - name: 4. Copy World Data from Cloud
-        run: |
-          echo "Copying world data from Google Drive..."
-          rclone copy gdrive:Minecraft_Server_Data . -P
-          echo "Copy complete."
-
-      - name: 5. Download Server and Mods
-        run: |
-          echo "Creating mods folder..."
-          mkdir -p mods
-          
-          echo "Downloading Arclight Server Jar..."
-          wget -q -O arclight-server.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/arclight.jar"
-          
-          echo "Downloading Pixelmon Mod..."
-          wget -q -O mods/pixelmon.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/Pixelmon-1.16.5-9.1.13-universal.jar"
-
-          echo "Downloading JEI Mod..."
-          wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
-          
-          echo "Downloads Complete."
-               
-      - name: 6. Start Server and Tunnel
-        # We start the tunnel LAST, right before the server, to ensure a clean connection.
-        env:
-          PLAYIT_SECRET: ${{ secrets.PLAYIT_SECRET_KEY }}
-        run: |
-          echo "Installing and starting playit.gg..."
+          echo "Installing playit.gg..."
           curl -SsL https://playit-cloud.github.io/ppa/key.gpg | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/playit.gpg >/dev/null
           echo "deb [signed-by=/etc/apt/trusted.gpg.d/playit.gpg] https://playit-cloud.github.io/ppa/data ./" | sudo tee /etc/apt/sources.list.d/playit-cloud.list
           sudo apt update
           sudo apt install -y playit
-
-          playit -s "$PLAYIT_SECRET" &
-          echo "Waiting for playit.gg to establish connection..."
-          sleep 15
           
-          echo "Sending Server Online message to Discord..."
-          curl -H "Content-Type: application/json" \
-               -d '{"content": "✅ **Server is now starting!**\nYour permanent IP is on the playit.gg website."}' \
-               ${{ secrets.DISCORD_WEBHOOK_URL }}
-
-          echo "Starting Minecraft Server..."
-          java -Xmx6G -Xms6G -jar arclight-server.jar nogui
-          
-      - name: 7. (Shutdown) Sync World Data to Cloud
-        if: always()
-        run: |
-          echo "Server is shutting down. Syncing world to cloud..."
-          curl -H "Content-Type: application/json" \
-               -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' \
-               ${{ secrets.DISCORD_WEBHOOK_URL }}
-          rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/GriefPreventionData/**" --include "/logs/**"
-          echo "Sync to cloud complete."
+          echo "Running playit.gg. Look for the claim code in the log below."
+          echo "The workflow will hang here. This is normal. Copy the code and then cancel the run."
+          playit
