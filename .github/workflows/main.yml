@@ -1,4 +1,4 @@
-name: Start Pixelmon Server (DEBUG)
+name: Start Pixelmon Server (Paranoid Clean Slate)
 
 on:
   workflow_dispatch:
@@ -7,16 +7,15 @@ jobs:
   start-server:
     runs-on: ubuntu-latest
     steps:
-      # Steps 1-5 (Checkout, Java, Rclone, Copy, Download) are unchanged.
       - name: 1. Checkout Repository Files
         uses: actions/checkout@v4
 
+      # Steps 2-5 are unchanged
       - name: 2. Setup Java 17 Environment
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-
       - name: 3. Configure Rclone
         env:
           ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
@@ -25,61 +24,38 @@ jobs:
           EXPIRY: ${{ secrets.RCLONE_EXPIRY }}
         run: |
           echo "Setting up Rclone..."
-          # Rclone setup commands are here...
           sudo curl https://rclone.org/install.sh | sudo bash
           mkdir -p ~/.config/rclone
           TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' "$ACCESS_TOKEN" "$TOKEN_TYPE" "$REFRESH_TOKEN" "$EXPIRY")
-          echo "[gdrive]" > ~/.config/rclone/rclone.conf
-          echo "type = drive" >> ~/.config/rclone/rclone.conf
-          echo "scope = drive" >> ~/.config/rclone/rclone.conf
-          echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
-          echo "Rclone configured."
+          echo "[gdrive]" > ~/.config/rclone/rclone.conf; echo "type = drive" >> ~/.config/rclone/rclone.conf; echo "scope = drive" >> ~/.config/rclone/rclone.conf; echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
           
       - name: 4. Copy World Data from Cloud
         run: |
           echo "Copying world data..."
           rclone copy gdrive:Minecraft_Server_Data . -P
-          echo "Copy complete."
-
       - name: 5. Download Server and Mods
         run: |
           echo "Downloading server files..."
-          # Download commands are here...
           mkdir -p mods
           wget -q -O arclight-server.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/arclight.jar"
           wget -q -O mods/pixelmon.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/Pixelmon-1.16.5-9.1.13-universal.jar"
           wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
-          echo "Downloads Complete."
                
-      # ---- THIS IS THE DEBUGGING STEP ----
-      - name: 6. Install, Debug, and Start zrok Tunnel
+      - name: 6. Install and Start zrok Tunnel (Clean Slate)
         env:
           ZROK_ENABLE_TOKEN: ${{ secrets.ZROK_ENABLE_TOKEN }}
           ZROK_SHARE_TOKEN: ${{ secrets.ZROK_SHARE_TOKEN }}
         run: |
-          # We will force the installation of a specific v0.4 version.
+          # --- NEW CLEANUP STEP ---
+          echo "Forcibly removing any old zrok configurations..."
+          rm -rf ~/.zrok
+          
           echo "Installing specific zrok version (v0.4.25)..."
           wget -q https://github.com/openziti/zrok/releases/download/v0.4.25/zrok_0.4.25_linux_amd64.tar.gz
           tar -xvf zrok_0.4.25_linux_amd64.tar.gz
           sudo mv zrok /usr/local/bin/
-
-          # --- DEBUGGING COMMANDS START ---
-          echo "----------------------------------------"
-          echo "DEBUG INFO:"
           
-          echo -n "1. zrok version is: "
-          zrok version
-          
-          echo -n "2. Is ZROK_ENABLE_TOKEN set? "
-          if [ -n "$ZROK_ENABLE_TOKEN" ]; then
-            echo "Yes"
-          else
-            echo "NO! IT IS EMPTY!"
-          fi
-          echo "----------------------------------------"
-          # --- DEBUGGING COMMANDS END ---
-
-          echo "Attempting to enable zrok agent..."
+          echo "Attempting to enable zrok agent with new token..."
           zrok enable "${ZROK_ENABLE_TOKEN}"
           
           echo "Starting zrok tunnel in background..."
@@ -88,13 +64,11 @@ jobs:
           echo "Waiting for zrok to establish connection..."
           sleep 15
 
-      # The rest of the workflow is unchanged.
+      # The rest of the workflow is unchanged
       - name: 7. Start Server and Notify
         run: |
           echo "Sending Server Online message to Discord..."
-          curl -H "Content-Type: application/json" \
-               -d '{"content": "✅ **Server is now starting!** The IP is the permanent address from zrok."}' \
-               ${{ secrets.DISCORD_WEBHOOK_URL }}
+          curl -H "Content-Type: application/json" -d '{"content": "✅ **Server is now starting!** The IP is the permanent address from zrok."}' ${{ secrets.DISCORD_WEBHOOK_URL }}
           echo "Starting Minecraft Server..."
           java -Xmx6G -Xms6G -jar arclight-server.jar nogui
           
@@ -102,8 +76,5 @@ jobs:
         if: always()
         run: |
           echo "Server is shutting down. Syncing world to cloud..."
-          curl -H "Content-Type: application/json" \
-               -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' \
-               ${{ secrets.DISCORD_WEBHOOK_URL }}
+          curl -H "Content-Type: application/json" -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' ${{ secrets.DISCORD_WEBHOOK_URL }}
           rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/GriefPreventionData/**" --include "/logs/**"
-          echo "Sync to cloud complete."
