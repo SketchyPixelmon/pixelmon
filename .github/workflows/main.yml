@@ -1,98 +1,13 @@
-name: Start Pixelmon Server
-
-on:
-  workflow_dispatch:
-
-jobs:
-  start-server:
-    runs-on: ubuntu-latest
-    steps:
-      - name: 1. Checkout Repository Files
-        uses: actions/checkout@v4
-
-      - name: 2. Setup Java 17 Environment
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: 3. Configure Rclone (The ENV File Method)
-        env:
-          ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
-          REFRESH_TOKEN: ${{ secrets.RCLONE_REFRESH_TOKEN }}
-          TOKEN_TYPE: ${{ secrets.RCLONE_TOKEN_TYPE }}
-          EXPIRY: ${{ secrets.RCLONE_EXPIRY }}
-        run: |
-          echo "Setting up Rclone..."
-          sudo curl https://rclone.org/install.sh | sudo bash
-          mkdir -p ~/.config/rclone
-          
-          TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' \
-            "$ACCESS_TOKEN" \
-            "$TOKEN_TYPE" \
-            "$REFRESH_TOKEN" \
-            "$EXPIRY" \
-          )
-          
-          echo "[gdrive]" > ~/.config/rclone/rclone.conf
-          echo "type = drive" >> ~/.config/rclone/rclone.conf
-          echo "scope = drive" >> ~/.config/rclone/rclone.conf
-          echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
-          echo "Rclone configured."
-
-      - name: 4. Copy World Data from Cloud
-        run: |
-          echo "Copying world data from Google Drive..."
-          rclone copy gdrive:Minecraft_Server_Data . -P
-          echo "Copy complete."
-
-      - name: 5. Download Server and Mods
-        run: |
-          echo "Creating mods folder..."
-          mkdir -p mods
-          
-          echo "Downloading Arclight Server Jar..."
-          wget -q -O arclight-server.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/arclight.jar"
-          
-          echo "Downloading Pixelmon Mod..."
-          wget -q -O mods/pixelmon.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/Pixelmon-1.16.5-9.1.13-universal.jar"
-          echo "Downloading JEI Mod..."
-          wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
-          
-          echo "Downloads Complete."
-
-      - name: 6. Install Cloudflared
-        run: |
-          echo "Installing cloudflared..."
-          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo dpkg -i cloudflared-linux-amd64.deb
-          echo "Cloudflared installed."
-
-      - name: 7. Start Server and Cloudflare Tunnel
-        env:
-          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: |
-          echo "Starting Cloudflare Tunnel..."
-          cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN" &
-
-          echo "Waiting for tunnel to initialize..."
-          sleep 10  # Adjust if needed
-
-          echo "Sending IP to Discord..."
-          curl -H "Content-Type: application/json" \
-               -d '{"content": "✅ **Pixelmon Server is Online!**\nJoin using your Cloudflare Tunnel."}' \
-               "$DISCORD_WEBHOOK_URL"
-
-          echo "Starting Minecraft Server..."
-          java -Xmx6G -Xms6G -jar arclight-server.jar nogui
-
-      - name: 8. (Shutdown) Sync World Data to Cloud
-        if: always()
-        run: |
-          echo "Server is shutting down. Syncing world to cloud..."
-          curl -H "Content-Type: application/json" \
-               -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' \
-               ${{ secrets.DISCORD_WEBHOOK_URL }}
-          rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/GriefPreventionData/**" --include "/logs/**"
-          echo "Sync to cloud complete."
+- name: Start Cloudflare Tunnel
+  env:
+    TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+  run: |
+    echo "Starting Cloudflare Tunnel..."
+    cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN" > tunnel.log 2>&1 &
+    sleep 10
+    if ! grep -q "Connected" tunnel.log; then
+      echo "❌ Tunnel failed to start. Check tunnel.log for details."
+      cat tunnel.log
+      exit 1
+    fi
+    echo "✅ Tunnel started successfully."
