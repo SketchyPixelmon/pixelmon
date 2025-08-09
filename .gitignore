@@ -1,0 +1,7 @@
+# Ignore Minecraft world and log files
+world/
+logs/
+usercache.json
+banned-ips.json
+banned-players.json
+*.log
