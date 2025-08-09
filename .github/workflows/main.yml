@@ -22,13 +22,13 @@ jobs:
           mkdir -p mods
           
           echo "Downloading Arclight Server Jar..."
-          wget -q -O arclight-server.jar "https://files.hypertention.cn/v1/objects/032c15267a7d21198f9996f4d734475630488daf"
+          wget -q -O arclight-server.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/arclight.jar"
           
           echo "Downloading Pixelmon Mod..."
-          wget -q -O mods/pixelmon.jar "https://reforged.gg/downloads/pixelmon/9.1.13/pixelmon-1.16.5-9.1.13-server.jar"
+          wget -q -O mods/pixelmon.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/Pixelmon-1.16.5-9.1.13-universal.jar"
 
           echo "Downloading JEI Mod..."
-          wget -q -O mods/jei.jar "https://cdn.modrinth.com/data/u6dRKJwZ/versions/5sqlmqOH/jei-1.16.5-7.7.1.153.jar"
+          wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
           
           echo "Downloads Complete."
 
