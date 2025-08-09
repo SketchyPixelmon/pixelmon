@@ -62,15 +62,19 @@ jobs:
           
           echo "Downloads Complete."
 
-      - name: 6. Start playit.gg Tunnel
+      - name: 6. Install and Start playit.gg Tunnel
+        # This is YOUR superior installation method. It is the most stable way.
         env:
           PLAYIT_SECRET: ${{ secrets.PLAYIT_SECRET_KEY }}
         run: |
-          echo "Starting playit.gg tunnel..."
-          # Download and run playit.gg in the background
-          wget -O playit "https://github.com/playit-gg/playit-agent/releases/download/v0.9.3/playit-linux-amd64"
-          chmod +x playit
-          ./playit -s "$PLAYIT_SECRET" &
+          echo "Installing playit.gg via official repository..."
+          curl -SsL https://playit-cloud.github.io/ppa/key.gpg | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/playit.gpg >/dev/null
+          echo "deb [signed-by=/etc/apt/trusted.gpg.d/playit.gpg] https://playit-cloud.github.io/ppa/data ./" | sudo tee /etc/apt/sources.list.d/playit-cloud.list
+          sudo apt update
+          sudo apt install -y playit
+          
+          echo "Starting playit.gg tunnel in the background..."
+          playit -s "$PLAYIT_SECRET" &
           sleep 5 # Give it a moment to connect
           
           echo "Sending Server Online message to Discord..."
