@@ -38,7 +38,10 @@ jobs:
           echo "Syncing world data from Google Drive..."
           rclone sync gdrive:Minecraft_Server_Data . -P
           echo "Sync complete."
-          
+      - name: 5a. Install JQ (for reading Ngrok IP)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
       - name: 6. Start Server and Tunnel
         run: |
           echo "Starting Ngrok tunnel..."
