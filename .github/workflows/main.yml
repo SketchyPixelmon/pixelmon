@@ -16,7 +16,7 @@ jobs:
           distribution: 'temurin'
           java-version: '8'
 
-      - name: 3. Download Server and Mods
+      - name: 3. Download Server and Mods from Your Release
         run: |
           echo "Creating mods folder..."
           mkdir -p mods
@@ -39,6 +39,10 @@ jobs:
           mkdir -p ~/.config/rclone
           echo "${{ secrets.RCLONE_CONF }}" > ~/.config/rclone/rclone.conf
           echo "Rclone configured."
+          
+          # DEBUGGING STEP: Print the contents of the file to see what the runner sees
+          echo "--- Verifying rclone.conf content ---"
+          cat ~/.config/rclone/rclone.conf
           
       - name: 5. Sync World Data from Cloud
         run: |
