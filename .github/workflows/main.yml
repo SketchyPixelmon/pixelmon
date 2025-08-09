@@ -16,7 +16,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 3. Configure Rclone (The ENV File Method)
+      - name: 3. Configure Rclone
         env:
           ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
           REFRESH_TOKEN: ${{ secrets.RCLONE_REFRESH_TOKEN }}
@@ -62,34 +62,24 @@ jobs:
           
           echo "Downloads Complete."
 
-      - name: 6. Install JQ (for reading Ngrok IP)
+      - name: 6. Start playit.gg Tunnel
+        env:
+          PLAYIT_SECRET: ${{ secrets.PLAYIT_SECRET_KEY }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
+          echo "Starting playit.gg tunnel..."
+          # Download and run playit.gg in the background
+          wget -O playit "https://github.com/playit-gg/playit-agent/releases/download/v0.9.3/playit-linux-amd64"
+          chmod +x playit
+          ./playit -s "$PLAYIT_SECRET" &
+          sleep 5 # Give it a moment to connect
           
-      - name: 7. Start Server and Tunnel
-        run: |
-          echo "Starting Ngrok tunnel..."
-          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt update
-          sudo apt install ngrok
-          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-          
-          # We removed the silencing to see Ngrok's errors
-          ngrok tcp 25565 &
-          
-          echo "Ngrok process started. Giving it a moment to connect..."
-          sleep 5
-
-          echo "Attempting to get Ngrok IP..."
-          while ! NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url // empty'); [ -z "$NGROK_URL" ]; do sleep 2; done
-          
-          echo "Sending IP to Discord..."
+          echo "Sending Server Online message to Discord..."
           curl -H "Content-Type: application/json" \
-               -d '{"content": "✅ **Pixelmon Server is Online!**\nJoin at: `'"$NGROK_URL"'`"}' \
+               -d '{"content": "✅ **Pixelmon Server is Online!**\nYour permanent IP is on the playit.gg website."}' \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
                
+      - name: 7. Start Minecraft Server
+        run: |
           echo "Starting Minecraft Server..."
           java -Xmx6G -Xms6G -jar arclight-server.jar nogui
           
