@@ -10,11 +10,11 @@ jobs:
       - name: 1. Checkout Repository Files
         uses: actions/checkout@v4
 
-      - name: 2. Setup Java Environment
+      - name: 2. Setup Java 17 Environment
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '8'
+          java-version: '17'
 
       - name: 3. Configure Rclone (The ENV File Method)
         env:
@@ -41,7 +41,6 @@ jobs:
           echo "Rclone configured."
           
       - name: 4. Copy World Data from Cloud
-        # THIS IS THE FIX. 'copy' is non-destructive and will not delete other files.
         run: |
           echo "Copying world data from Google Drive..."
           rclone copy gdrive:Minecraft_Server_Data . -P
@@ -79,8 +78,7 @@ jobs:
           ngrok tcp 25565 &> /dev/null &
 
           echo "Waiting for Ngrok IP..."
-          sleep 10
-          export NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          while ! NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url // empty'); [ -z "$NGROK_URL" ]; do sleep 2; done
           
           echo "Sending IP to Discord..."
           curl -H "Content-Type: application/json" \
@@ -97,6 +95,5 @@ jobs:
           curl -H "Content-Type: application/json" \
                -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
-          # The sync at the end is fine because the --include flags protect it.
           rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/GriefPreventionData/**" --include "/logs/**"
           echo "Sync to cloud complete."
