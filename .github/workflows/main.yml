@@ -16,7 +16,40 @@ jobs:
           distribution: 'temurin'
           java-version: '8'
 
-      - name: 3. Download Server and Mods
+      - name: 3. Configure Rclone (The ENV File Method)
+        # We do this before syncing so rclone is ready
+        env:
+          ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
+          REFRESH_TOKEN: ${{ secrets.RCLONE_REFRESH_TOKEN }}
+          TOKEN_TYPE: ${{ secrets.RCLONE_TOKEN_TYPE }}
+          EXPIRY: ${{ secrets.RCLONE_EXPIRY }}
+        run: |
+          echo "Setting up Rclone..."
+          sudo curl https://rclone.org/install.sh | sudo bash
+          mkdir -p ~/.config/rclone
+          
+          TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' \
+            "$ACCESS_TOKEN" \
+            "$TOKEN_TYPE" \
+            "$REFRESH_TOKEN" \
+            "$EXPIRY" \
+          )
+          
+          echo "[gdrive]" > ~/.config/rclone/rclone.conf
+          echo "type = drive" >> ~/.config/rclone/rclone.conf
+          echo "scope = drive" >> ~/.config/rclone/rclone.conf
+          echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
+          echo "Rclone configured."
+          
+      - name: 4. Sync World Data from Cloud
+        # We sync the world FIRST, to lay down the base data
+        run: |
+          echo "Syncing world data from Google Drive..."
+          rclone sync gdrive:Minecraft_Server_Data . -P
+          echo "Sync complete."
+
+      - name: 5. Download Server and Mods
+        # NOW we download the jars, placing them on top of the synced data
         run: |
           echo "Creating mods folder..."
           mkdir -p mods
@@ -31,39 +64,6 @@ jobs:
           wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
           
           echo "Downloads Complete."
-
-      - name: 4. Configure Rclone (The ENV File Method)
-        env:
-          ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
-          REFRESH_TOKEN: ${{ secrets.RCLONE_REFRESH_TOKEN }}
-          TOKEN_TYPE: ${{ secrets.RCLONE_TOKEN_TYPE }}
-          EXPIRY: ${{ secrets.RCLONE_EXPIRY }}
-        run: |
-          echo "Setting up Rclone..."
-          sudo curl https://rclone.org/install.sh | sudo bash
-          mkdir -p ~/.config/rclone
-          
-          echo "Building JSON from simple secrets..."
-          TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' \
-            "$ACCESS_TOKEN" \
-            "$TOKEN_TYPE" \
-            "$REFRESH_TOKEN" \
-            "$EXPIRY" \
-          )
-          
-          echo "Building rclone.conf..."
-          echo "[gdrive]" > ~/.config/rclone/rclone.conf
-          echo "type = drive" >> ~/.config/rclone/rclone.conf
-          echo "scope = drive" >> ~/.config/rclone/rclone.conf
-          echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
-          
-          echo "Rclone configured."
-          
-      - name: 5. Sync World Data from Cloud
-        run: |
-          echo "Syncing world data from Google Drive..."
-          rclone sync gdrive:Minecraft_Server_Data . -P
-          echo "Sync complete."
 
       - name: 6. Install JQ (for reading Ngrok IP)
         run: |
@@ -88,9 +88,6 @@ jobs:
           curl -H "Content-Type: application/json" \
                -d '{"content": "✅ **Pixelmon Server is Online!**\nJoin at: `'"$NGROK_URL"'`"}' \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
-               
-          echo "DEBUG: Listing files in directory..."
-          ls -l
                
           echo "Starting Minecraft Server..."
           java -Xmx6G -Xms6G -jar arclight-server.jar nogui
