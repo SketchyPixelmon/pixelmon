@@ -33,8 +33,6 @@ jobs:
           echo "Downloads Complete."
 
       - name: 4. Configure Rclone (The ENV File Method)
-        # This is the most robust method. We load simple secrets and build the complex
-        # JSON string inside the script, preventing any corruption by GitHub Actions.
         env:
           ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
           REFRESH_TOKEN: ${{ secrets.RCLONE_REFRESH_TOKEN }}
@@ -46,7 +44,6 @@ jobs:
           mkdir -p ~/.config/rclone
           
           echo "Building JSON from simple secrets..."
-          # Use printf to safely construct the JSON string with all quotes intact.
           TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' \
             "$ACCESS_TOKEN" \
             "$TOKEN_TYPE" \
@@ -55,7 +52,6 @@ jobs:
           )
           
           echo "Building rclone.conf..."
-          # Use echo to build the final config file.
           echo "[gdrive]" > ~/.config/rclone/rclone.conf
           echo "type = drive" >> ~/.config/rclone/rclone.conf
           echo "scope = drive" >> ~/.config/rclone/rclone.conf
@@ -92,6 +88,9 @@ jobs:
           curl -H "Content-Type: application/json" \
                -d '{"content": "✅ **Pixelmon Server is Online!**\nJoin at: `'"$NGROK_URL"'`"}' \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
+               
+          echo "DEBUG: Listing files in directory..."
+          ls -l
                
           echo "Starting Minecraft Server..."
           java -Xmx6G -Xms6G -jar arclight-server.jar nogui
