@@ -15,17 +15,23 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '8'
-      - name: 3. Download Server Jars
+
+      - name: 3. Download Server and Mods
         run: |
+          echo "Creating mods folder..."
+          mkdir -p mods
+          
           echo "Downloading Arclight Server Jar..."
-          # This is your new, working Arclight link. The -O renames the file correctly.
           wget -q -O arclight-server.jar "https://files.hypertention.cn/v1/objects/032c15267a7d21198f9996f4d734475630488daf"
           
-          echo "Downloading Pixelmon Mod Jar..."
-          # This is the correct direct link for the Pixelmon Mod.
+          echo "Downloading Pixelmon Mod..."
           wget -q -O mods/pixelmon.jar "https://reforged.gg/downloads/pixelmon/9.1.13/pixelmon-1.16.5-9.1.13-server.jar"
+
+          echo "Downloading JEI Mod..."
+          wget -q -O mods/jei.jar "https://cdn.modrinth.com/data/u6dRKJwZ/versions/5sqlmqOH/jei-1.16.5-7.7.1.153.jar"
+          
           echo "Downloads Complete."
-      
+
       - name: 4. Configure Rclone
         run: |
           echo "Setting up Rclone..."
@@ -39,11 +45,13 @@ jobs:
           echo "Syncing world data from Google Drive..."
           rclone sync gdrive:Minecraft_Server_Data . -P
           echo "Sync complete."
-      - name: 5a. Install JQ (for reading Ngrok IP)
+
+      - name: 6. Install JQ (for reading Ngrok IP)
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
-      - name: 6. Start Server and Tunnel
+          
+      - name: 7. Start Server and Tunnel
         run: |
           echo "Starting Ngrok tunnel..."
           curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
@@ -65,12 +73,12 @@ jobs:
           echo "Starting Minecraft Server..."
           java -Xmx6G -Xms6G -jar arclight-server.jar nogui
           
-      - name: 7. (Shutdown) Sync World Data to Cloud
+      - name: 8. (Shutdown) Sync World Data to Cloud
         if: always()
         run: |
           echo "Server is shutting down. Syncing world to cloud..."
           curl -H "Content-Type: application/json" \
                -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
-          rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/GriefPreventionData/**"
+          rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/GriefPreventionData/**" --include "/logs/**"
           echo "Sync to cloud complete."
