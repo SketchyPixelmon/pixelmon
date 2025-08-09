@@ -40,14 +40,17 @@ EOF
         run: |
           echo "Copying world data..."
           rclone copy gdrive:Minecraft_Server_Data . -P
+          echo "✅ World data copied"
 
       - name: 5. Download Server & Mods
         run: |
+          echo "Creating mods folder..."
           mkdir -p mods
+          echo "Downloading server files..."
           wget -q -O arclight-server.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/arclight.jar"
           wget -q -O mods/pixelmon.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/Pixelmon-1.16.5-9.1.13-universal.jar"
           wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
-          echo "✅ Server files downloaded"
+          echo "✅ Server and mods downloaded"
 
       - name: 6. Install & Run Cloudflare Tunnel
         env:
@@ -57,33 +60,31 @@ EOF
           wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
           sudo dpkg -i cloudflared-linux-amd64.deb || sudo apt-get -f install -y
 
-          echo "Starting Cloudflare Tunnel (TCP port 25565)..."
+          echo "Starting Cloudflare Tunnel..."
           nohup cloudflared tunnel run --token "$TUNNEL_TOKEN" > cloudflared.log 2>&1 &
-          
-          sleep 10
+
+          sleep 15
 
           echo "Checking tunnel status..."
           tail -n 30 cloudflared.log
 
-          # Extract the public URL from logs
-          # Look for: "info" msg="Connection established" or "info" msg="Starting connection"
+          # Confirm tunnel is connected
           if grep -q "Connection established" cloudflared.log; then
             echo "✅ Tunnel is UP"
           else
-            echo "❌ Tunnel failed to start. Dumping full log:"
+            echo "❌ Tunnel failed to start. Dumping log:"
             cat cloudflared.log
             exit 1
           fi
 
       - name: 7. Notify & Start Minecraft
         run: |
-          # Get the public address from tunnel name
-          # Replace 'pixelmon-tunnel' with your actual tunnel name
-          TUNNEL_URL="pixelmon-tunnel.trycloudflare.com"
-          
-          echo "Sending server online message..."
+          # 🔁 REPLACE THIS WITH YOUR ACTUAL TUNNEL NAME FROM CLOUDFLARE DASHBOARD
+          TUNNEL_HOST="pixelmon-tunnel.trycloudflare.com"
+
+          echo "Sending server online message to Discord..."
           curl -H "Content-Type: application/json" \
-               -d '{"content": "✅ **Pixelmon Server is Online!**\nConnect to: `'\$TUNNEL_URL:25565'`"}' \
+               -d '{"content": "✅ **Pixelmon Server is Online!**\\nJoin at: `'$TUNNEL_HOST:25565'`"}' \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
 
           echo "Starting Minecraft server..."
@@ -92,11 +93,12 @@ EOF
       - name: 8. (Shutdown) Sync World to Cloud
         if: always()
         run: |
-          echo "Syncing world data back to Google Drive..."
+          echo "Server is shutting down. Syncing world data to Google Drive..."
           curl -H "Content-Type: application/json" \
-               -d '{"content": "❌ **Server is Offline.** World saved."}' \
+               -d '{"content": "❌ **Server is Offline.**\\nWorld saved to cloud."}' \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
           rclone sync . gdrive:Minecraft_Server_Data -P \
             --include "/world/**" \
             --include "/plugins/GriefPreventionData/**" \
             --include "/logs/**"
+          echo "✅ World synced to cloud"
