@@ -17,7 +17,6 @@ jobs:
           java-version: '8'
 
       - name: 3. Configure Rclone (The ENV File Method)
-        # We do this before syncing so rclone is ready
         env:
           ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
           REFRESH_TOKEN: ${{ secrets.RCLONE_REFRESH_TOKEN }}
@@ -41,15 +40,14 @@ jobs:
           echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
           echo "Rclone configured."
           
-      - name: 4. Sync World Data from Cloud
-        # We sync the world FIRST, to lay down the base data
+      - name: 4. Copy World Data from Cloud
+        # THIS IS THE FIX. 'copy' is non-destructive and will not delete other files.
         run: |
-          echo "Syncing world data from Google Drive..."
-          rclone sync gdrive:Minecraft_Server_Data . -P
-          echo "Sync complete."
+          echo "Copying world data from Google Drive..."
+          rclone copy gdrive:Minecraft_Server_Data . -P
+          echo "Copy complete."
 
       - name: 5. Download Server and Mods
-        # NOW we download the jars, placing them on top of the synced data
         run: |
           echo "Creating mods folder..."
           mkdir -p mods
@@ -99,5 +97,6 @@ jobs:
           curl -H "Content-Type: application/json" \
                -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
+          # The sync at the end is fine because the --include flags protect it.
           rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/GriefPreventionData/**" --include "/logs/**"
           echo "Sync to cloud complete."
