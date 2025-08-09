@@ -75,9 +75,14 @@ jobs:
           sudo apt update
           sudo apt install ngrok
           ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-          ngrok tcp 25565 &> /dev/null &
+          
+          # We removed the silencing to see Ngrok's errors
+          ngrok tcp 25565 &
+          
+          echo "Ngrok process started. Giving it a moment to connect..."
+          sleep 5
 
-          echo "Waiting for Ngrok IP..."
+          echo "Attempting to get Ngrok IP..."
           while ! NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url // empty'); [ -z "$NGROK_URL" ]; do sleep 2; done
           
           echo "Sending IP to Discord..."
