@@ -32,29 +32,35 @@ jobs:
           
           echo "Downloads Complete."
 
-      - name: 4. Configure Rclone (Python Override)
-        # This is the definitive solution. We use Python to write the file,
-        # completely bypassing the bash shell that is corrupting the secret string.
+      - name: 4. Configure Rclone (The ENV File Method)
+        # This is the most robust method. We load simple secrets and build the complex
+        # JSON string inside the script, preventing any corruption by GitHub Actions.
         env:
-          RCLONE_TOKEN: ${{ secrets.RCLONE_TOKEN_JSON }}
+          ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
+          REFRESH_TOKEN: ${{ secrets.RCLONE_REFRESH_TOKEN }}
+          TOKEN_TYPE: ${{ secrets.RCLONE_TOKEN_TYPE }}
+          EXPIRY: ${{ secrets.RCLONE_EXPIRY }}
         run: |
           echo "Setting up Rclone..."
           sudo curl https://rclone.org/install.sh | sudo bash
           mkdir -p ~/.config/rclone
           
-          echo "Building rclone.conf using Python to guarantee success..."
-          python3 -c '
-          import os
-          token = os.environ["RCLONE_TOKEN"]
-          conf_content = f"""
-          [gdrive]
-          type = drive
-          scope = drive
-          token = {token}
-          """
-          with open(os.path.expanduser("~/.config/rclone/rclone.conf"), "w") as f:
-              f.write(conf_content.strip())
-          '
+          echo "Building JSON from simple secrets..."
+          # Use printf to safely construct the JSON string with all quotes intact.
+          TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' \
+            "$ACCESS_TOKEN" \
+            "$TOKEN_TYPE" \
+            "$REFRESH_TOKEN" \
+            "$EXPIRY" \
+          )
+          
+          echo "Building rclone.conf..."
+          # Use echo to build the final config file.
+          echo "[gdrive]" > ~/.config/rclone/rclone.conf
+          echo "type = drive" >> ~/.config/rclone/rclone.conf
+          echo "scope = drive" >> ~/.config/rclone/rclone.conf
+          echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
+          
           echo "Rclone configured."
           
       - name: 5. Sync World Data from Cloud
