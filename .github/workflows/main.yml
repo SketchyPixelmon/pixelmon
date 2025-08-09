@@ -1,6 +1,6 @@
-- name: Start Cloudflare Tunnel
+-name: Start Cloudflare Tunnel
   env:
-    TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+  TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
   run: |
     echo "Starting Cloudflare Tunnel..."
     cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN" > tunnel.log 2>&1 &
