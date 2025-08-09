@@ -61,33 +61,31 @@ jobs:
           wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
           
           echo "Downloads Complete."
-
-      - name: 6. Install and Start playit.gg Tunnel
-        # This is YOUR superior installation method. It is the most stable way.
+               
+      - name: 6. Start Server and Tunnel
+        # We start the tunnel LAST, right before the server, to ensure a clean connection.
         env:
           PLAYIT_SECRET: ${{ secrets.PLAYIT_SECRET_KEY }}
         run: |
-          echo "Installing playit.gg via official repository..."
+          echo "Installing and starting playit.gg..."
           curl -SsL https://playit-cloud.github.io/ppa/key.gpg | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/playit.gpg >/dev/null
           echo "deb [signed-by=/etc/apt/trusted.gpg.d/playit.gpg] https://playit-cloud.github.io/ppa/data ./" | sudo tee /etc/apt/sources.list.d/playit-cloud.list
           sudo apt update
           sudo apt install -y playit
-          
-          echo "Starting playit.gg tunnel in the background..."
+
           playit -s "$PLAYIT_SECRET" &
-          sleep 5 # Give it a moment to connect
+          echo "Waiting for playit.gg to establish connection..."
+          sleep 15
           
           echo "Sending Server Online message to Discord..."
           curl -H "Content-Type: application/json" \
-               -d '{"content": "✅ **Pixelmon Server is Online!**\nYour permanent IP is on the playit.gg website."}' \
+               -d '{"content": "✅ **Server is now starting!**\nYour permanent IP is on the playit.gg website."}' \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
-               
-      - name: 7. Start Minecraft Server
-        run: |
+
           echo "Starting Minecraft Server..."
           java -Xmx6G -Xms6G -jar arclight-server.jar nogui
           
-      - name: 8. (Shutdown) Sync World Data to Cloud
+      - name: 7. (Shutdown) Sync World Data to Cloud
         if: always()
         run: |
           echo "Server is shutting down. Syncing world to cloud..."
