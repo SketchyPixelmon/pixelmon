@@ -1,4 +1,4 @@
-name: Start Pixelmon Server (Paranoid Clean Slate)
+name: Start Pixelmon Server (via Cloudflare Tunnel)
 
 on:
   workflow_dispatch:
@@ -6,16 +6,18 @@ on:
 jobs:
   start-server:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
     steps:
-      - name: 1. Checkout Repository Files
+      - name: 1. Checkout Repository
         uses: actions/checkout@v4
 
-      # Steps 2-5 are unchanged
-      - name: 2. Setup Java 17 Environment
+      - name: 2. Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
+
       - name: 3. Configure Rclone
         env:
           ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
@@ -23,58 +25,62 @@ jobs:
           TOKEN_TYPE: ${{ secrets.RCLONE_TOKEN_TYPE }}
           EXPIRY: ${{ secrets.RCLONE_EXPIRY }}
         run: |
-          echo "Setting up Rclone..."
+          echo "Installing rclone..."
           sudo curl https://rclone.org/install.sh | sudo bash
           mkdir -p ~/.config/rclone
           TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' "$ACCESS_TOKEN" "$TOKEN_TYPE" "$REFRESH_TOKEN" "$EXPIRY")
-          echo "[gdrive]" > ~/.config/rclone/rclone.conf; echo "type = drive" >> ~/.config/rclone/rclone.conf; echo "scope = drive" >> ~/.config/rclone/rclone.conf; echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
-          
-      - name: 4. Copy World Data from Cloud
+          cat > ~/.config/rclone/rclone.conf << EOF
+[gdrive]
+type = drive
+scope = drive
+token = $TOKEN_JSON
+EOF
+
+      - name: 4. Copy World Data
         run: |
-          echo "Copying world data..."
+          echo "Copying world data from Google Drive..."
           rclone copy gdrive:Minecraft_Server_Data . -P
-      - name: 5. Download Server and Mods
+
+      - name: 5. Download Server & Mods
         run: |
           echo "Downloading server files..."
           mkdir -p mods
           wget -q -O arclight-server.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/arclight.jar"
           wget -q -O mods/pixelmon.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/Pixelmon-1.16.5-9.1.13-universal.jar"
           wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
-               
-      - name: 6. Install and Start zrok Tunnel (Clean Slate)
+
+      - name: 6. Install and Run Cloudflare Tunnel
         env:
-          ZROK_ENABLE_TOKEN: ${{ secrets.ZROK_ENABLE_TOKEN }}
-          ZROK_SHARE_TOKEN: ${{ secrets.ZROK_SHARE_TOKEN }}
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}  # or use JSON
         run: |
-          # --- NEW CLEANUP STEP ---
-          echo "Forcibly removing any old zrok configurations..."
-          rm -rf ~/.zrok
-          
-          echo "Installing specific zrok version (v0.4.25)..."
-          wget -q https://github.com/openziti/zrok/releases/download/v0.4.25/zrok_0.4.25_linux_amd64.tar.gz
-          tar -xvf zrok_0.4.25_linux_amd64.tar.gz
-          sudo mv zrok /usr/local/bin/
-          
-          echo "Attempting to enable zrok agent with new token..."
-          zrok enable "${ZROK_ENABLE_TOKEN}"
-          
-          echo "Starting zrok tunnel in background..."
-          nohup zrok share reserved "${ZROK_SHARE_TOKEN}" --headless > zrok.log 2>&1 &
-          
-          echo "Waiting for zrok to establish connection..."
+          echo "Installing cloudflared..."
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb
+
+          echo "Starting Cloudflare Tunnel for Minecraft (port 25565)..."
+          nohup cloudflared tunnel run --token "$TUNNEL_TOKEN" > cloudflared.log 2>&1 &
+
+          echo "Waiting 15 seconds for tunnel to start..."
           sleep 15
 
-      # The rest of the workflow is unchanged
-      - name: 7. Start Server and Notify
+          # Show the log to confirm connection
+          tail -n 20 cloudflared.log
+
+      - name: 7. Start Minecraft Server
         run: |
-          echo "Sending Server Online message to Discord..."
-          curl -H "Content-Type: application/json" -d '{"content": "✅ **Server is now starting!** The IP is the permanent address from zrok."}' ${{ secrets.DISCORD_WEBHOOK_URL }}
-          echo "Starting Minecraft Server..."
+          echo "Sending 'Server Starting' message to Discord..."
+          curl -H "Content-Type: application/json" \
+               -d '{"content": "✅ **Pixelmon Server is Starting!**\nConnect via: \`\`your-tunnel-name.trycloudflare.com\`\`"}' \
+               ${{ secrets.DISCORD_WEBHOOK_URL }}
+
+          echo "Starting Minecraft server..."
           java -Xmx6G -Xms6G -jar arclight-server.jar nogui
-          
-      - name: 8. (Shutdown) Sync World Data to Cloud
+
+      - name: 8. (Shutdown) Sync World Back to Cloud
         if: always()
         run: |
-          echo "Server is shutting down. Syncing world to cloud..."
-          curl -H "Content-Type: application/json" -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' ${{ secrets.DISCORD_WEBHOOK_URL }}
+          echo "Shutting down. Syncing world data back to Google Drive..."
+          curl -H "Content-Type: application/json" \
+               -d '{"content": "❌ **Server is Offline.** World saved."}' \
+               ${{ secrets.DISCORD_WEBHOOK_URL }}
           rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/GriefPreventionData/**" --include "/logs/**"
