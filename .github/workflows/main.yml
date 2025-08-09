@@ -32,18 +32,21 @@ jobs:
           
           echo "Downloads Complete."
 
-      - name: 4. Configure Rclone with Echo
+      - name: 4. Configure Rclone (The Definitive Way)
+        # This is the final, robust method. It uses the 'env' keyword to safely
+        # load the secret before the script runs, preventing any formatting errors.
+        env:
+          RCLONE_TOKEN: ${{ secrets.RCLONE_TOKEN_JSON }}
         run: |
           echo "Setting up Rclone..."
           sudo curl https://rclone.org/install.sh | sudo bash
           mkdir -p ~/.config/rclone
           
-          echo "Building rclone.conf using echo..."
-          # This method is more robust for handling special characters in secrets.
+          echo "Building rclone.conf..."
           echo "[gdrive]" > ~/.config/rclone/rclone.conf
           echo "type = drive" >> ~/.config/rclone/rclone.conf
           echo "scope = drive" >> ~/.config/rclone/rclone.conf
-          echo "token = ${{ secrets.RCLONE_TOKEN_JSON }}" >> ~/.config/rclone/rclone.conf
+          echo "token = $RCLONE_TOKEN" >> ~/.config/rclone/rclone.conf
           
           echo "Rclone configured."
           
