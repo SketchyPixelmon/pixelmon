@@ -1,4 +1,4 @@
-name: Start Pixelmon Server (Cloudflare Tunnel)
+name: Start Pixelmon Server
 
 on:
   workflow_dispatch:
@@ -7,98 +7,92 @@ jobs:
   start-server:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Checkout Repository
+      - name: 1. Checkout Repository Files
         uses: actions/checkout@v4
 
-      - name: 2. Setup Java 17
+      - name: 2. Setup Java 17 Environment
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: 3. Configure Rclone
+      - name: 3. Configure Rclone (The ENV File Method)
         env:
           ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
           REFRESH_TOKEN: ${{ secrets.RCLONE_REFRESH_TOKEN }}
           TOKEN_TYPE: ${{ secrets.RCLONE_TOKEN_TYPE }}
           EXPIRY: ${{ secrets.RCLONE_EXPIRY }}
         run: |
-          echo "Installing rclone..."
-          sudo curl -s https://rclone.org/install.sh | sudo bash
+          echo "Setting up Rclone..."
+          sudo curl https://rclone.org/install.sh | sudo bash
           mkdir -p ~/.config/rclone
+          
           TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' \
-            "$ACCESS_TOKEN" "$TOKEN_TYPE" "$REFRESH_TOKEN" "$EXPIRY")
-          cat > ~/.config/rclone/rclone.conf << EOF
-[gdrive]
-type = drive
-scope = drive
-token = $TOKEN_JSON
-EOF
-          echo "✅ Rclone configured"
+            "$ACCESS_TOKEN" \
+            "$TOKEN_TYPE" \
+            "$REFRESH_TOKEN" \
+            "$EXPIRY" \
+          )
+          
+          echo "[gdrive]" > ~/.config/rclone/rclone.conf
+          echo "type = drive" >> ~/.config/rclone/rclone.conf
+          echo "scope = drive" >> ~/.config/rclone/rclone.conf
+          echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
+          echo "Rclone configured."
 
-      - name: 4. Copy World Data from Google Drive
+      - name: 4. Copy World Data from Cloud
         run: |
-          echo "Copying world data..."
+          echo "Copying world data from Google Drive..."
           rclone copy gdrive:Minecraft_Server_Data . -P
-          echo "✅ World data copied"
+          echo "Copy complete."
 
-      - name: 5. Download Server & Mods
+      - name: 5. Download Server and Mods
         run: |
           echo "Creating mods folder..."
           mkdir -p mods
-          echo "Downloading server files..."
+          
+          echo "Downloading Arclight Server Jar..."
           wget -q -O arclight-server.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/arclight.jar"
+          
+          echo "Downloading Pixelmon Mod..."
           wget -q -O mods/pixelmon.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/Pixelmon-1.16.5-9.1.13-universal.jar"
+          echo "Downloading JEI Mod..."
           wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
-          echo "✅ Server and mods downloaded"
+          
+          echo "Downloads Complete."
 
-      - name: 6. Install & Run Cloudflare Tunnel
-        env:
-          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+      - name: 6. Install Cloudflared
         run: |
           echo "Installing cloudflared..."
           wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-          sudo dpkg -i cloudflared-linux-amd64.deb || sudo apt-get -f install -y
+          sudo dpkg -i cloudflared-linux-amd64.deb
+          echo "Cloudflared installed."
 
-          echo "Starting Cloudflare Tunnel..."
-          nohup cloudflared tunnel run --token "$TUNNEL_TOKEN" > cloudflared.log 2>&1 &
-
-          sleep 15
-
-          echo "Checking tunnel status..."
-          tail -n 30 cloudflared.log
-
-          # Confirm tunnel is connected
-          if grep -q "Connection established" cloudflared.log; then
-            echo "✅ Tunnel is UP"
-          else
-            echo "❌ Tunnel failed to start. Dumping log:"
-            cat cloudflared.log
-            exit 1
-          fi
-
-      - name: 7. Notify & Start Minecraft
+      - name: 7. Start Server and Cloudflare Tunnel
+        env:
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          # 🔁 REPLACE THIS WITH YOUR ACTUAL TUNNEL NAME FROM CLOUDFLARE DASHBOARD
-          TUNNEL_HOST="pixelmon-tunnel.trycloudflare.com"
+          echo "Starting Cloudflare Tunnel..."
+          cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN" &
 
-          echo "Sending server online message to Discord..."
+          echo "Waiting for tunnel to initialize..."
+          sleep 10  # Adjust if needed
+
+          echo "Sending IP to Discord..."
           curl -H "Content-Type: application/json" \
-               -d '{"content": "✅ **Pixelmon Server is Online!**\\nJoin at: `'$TUNNEL_HOST:25565'`"}' \
-               ${{ secrets.DISCORD_WEBHOOK_URL }}
+               -d '{"content": "✅ **Pixelmon Server is Online!**\nJoin using your Cloudflare Tunnel."}' \
+               "$DISCORD_WEBHOOK_URL"
 
-          echo "Starting Minecraft server..."
+          echo "Starting Minecraft Server..."
           java -Xmx6G -Xms6G -jar arclight-server.jar nogui
 
-      - name: 8. (Shutdown) Sync World to Cloud
+      - name: 8. (Shutdown) Sync World Data to Cloud
         if: always()
         run: |
-          echo "Server is shutting down. Syncing world data to Google Drive..."
+          echo "Server is shutting down. Syncing world to cloud..."
           curl -H "Content-Type: application/json" \
-               -d '{"content": "❌ **Server is Offline.**\\nWorld saved to cloud."}' \
+               -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
-          rclone sync . gdrive:Minecraft_Server_Data -P \
-            --include "/world/**" \
-            --include "/plugins/GriefPreventionData/**" \
-            --include "/logs/**"
-          echo "✅ World synced to cloud"
+          rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/GriefPreventionData/**" --include "/logs/**"
+          echo "Sync to cloud complete."
