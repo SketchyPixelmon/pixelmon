@@ -22,15 +22,11 @@ jobs:
           EXPIRY: ${{ secrets.RCLONE_EXPIRY }}
         run: |
           echo "Setting up Rclone..."
-          curl -s https://rclone.org/install.sh | bash
+          sudo curl https://rclone.org/install.sh | sudo bash
           mkdir -p ~/.config/rclone
           TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' "$ACCESS_TOKEN" "$TOKEN_TYPE" "$REFRESH_TOKEN" "$EXPIRY")
-          cat > ~/.config/rclone/rclone.conf << EOF
-          [gdrive]
-          type = drive
-          scope = drive
-          token = $TOKEN_JSON
-          EOF
+          echo "[gdrive]" > ~/.config/rclone/rclone.conf
+          echo "type = drive" >> ~/.config/rclone/rclone.conf; echo "scope = drive" >> ~/.config/rclone/rclone.conf; echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
           
       - name: 4. Download Server Data from Cloud
         run: |
