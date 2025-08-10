@@ -1,21 +1,17 @@
 name: Start Pixelmon Server
-
 on:
   workflow_dispatch:
-
 jobs:
   start-server:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Checkout Repository Files (Includes DiscordSRV config template)
+      - name: 1. Checkout Repository Files
         uses: actions/checkout@v4
-
       - name: 2. Setup Java Environment
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '8'
-
       - name: 3. Configure Rclone
         env:
           ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
@@ -30,12 +26,11 @@ jobs:
           echo "[gdrive]" > ~/.config/rclone/rclone.conf
           echo "type = drive" >> ~/.config/rclone/rclone.conf; echo "scope = drive" >> ~/.config/rclone/rclone.conf; echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
           
-      - name: 4. Copy World Data from Cloud (Overwrites nothing important)
+      - name: 4. Copy Plugins Folder from Cloud
         run: |
-          echo "Copying world data from Google Drive..."
-          rclone copy gdrive:Minecraft_Server_Data . -P
-          echo "Copy complete."
-
+          echo "Copying plugins folder from Google Drive..."
+          rclone copy gdrive:Minecraft_Server_Data/plugins . -P
+          echo "Plugins copy complete."
       - name: 5. Download Server and Mods
         run: |
           echo "Creating mods folder..."
@@ -44,13 +39,11 @@ jobs:
           wget -q -O mods/pixelmon.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/Pixelmon-1.16.5-9.1.13-universal.jar"
           wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
           echo "Downloads Complete."
-
-
-      - name: 7. Install JQ
+      - name: 6. Install JQ
         run: |
           sudo apt-get update; sudo apt-get install -y jq
           
-      - name: 8. Start Server and Tunnel
+      - name: 7. Start Server and Tunnel
         run: |
           echo "Starting Ngrok tunnel..."
           curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
@@ -60,14 +53,14 @@ jobs:
           sleep 10
           export NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
           
-          curl -H "Content-Type: application/json" -d '{"content": "✅ **Pixelmon Server is Online!**\nJoin at: `'"$NGROK_URL"'`"}' ${{ secrets.DISCORD_WEBHOOK_URL }}
+          echo "Ngrok tunnel established at: $NGROK_URL"
           echo "Starting Minecraft Server..."
           java -Xmx6G -Xms6G -jar arclight-server.jar nogui
           
-      - name: 9. (Shutdown) Sync World Data to Cloud
+      - name: 8. (Shutdown) Sync Data to Cloud
         if: always()
         run: |
           echo "Server is shutting down..."
-          curl -H "Content-Type: application/json" -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' ${{ secrets.DISCORD_WEBHOOK_URL }}
-          rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/GriefPreventionData/**" --include "/logs/**"
+          echo "Syncing data to cloud..."
+          rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/**" --include "/logs/**"
           echo "Sync to cloud complete."
