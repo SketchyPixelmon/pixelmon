@@ -53,6 +53,7 @@ jobs:
           ngrok tcp --region=in 25565 &> /dev/null &
           sleep 10
           export NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          curl -H "Content-Type: application/json" -d '{"content": "✅ **Pixelmon Server is Online!**\nJoin at: `'"$NGROK_URL"'`"}' ${{ secrets.DISCORD_WEBHOOK_URL }}
           echo "Server available at: $NGROK_URL"
           
       - name: 7. Start Minecraft Server
@@ -64,5 +65,6 @@ jobs:
         if: always()
         run: |
           echo "Server shutting down - syncing data to cloud..."
+          curl -H "Content-Type: application/json" -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' ${{ secrets.DISCORD_WEBHOOK_URL }}
           rclone sync . gdrive:Minecraft_Server_Data -P --exclude "*.jar" --exclude "logs/**" --exclude ".git/**" --exclude ".github/**"
           echo "Sync complete."
