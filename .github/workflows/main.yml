@@ -7,7 +7,7 @@ jobs:
   start-server:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Checkout Repository Files
+      - name: 1. Checkout Repository Files (Includes DiscordSRV config template)
         uses: actions/checkout@v4
 
       - name: 2. Setup Java Environment
@@ -30,7 +30,7 @@ jobs:
           echo "[gdrive]" > ~/.config/rclone/rclone.conf
           echo "type = drive" >> ~/.config/rclone/rclone.conf; echo "scope = drive" >> ~/.config/rclone/rclone.conf; echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
           
-      - name: 4. Copy World Data from Cloud
+      - name: 4. Copy World Data from Cloud (Overwrites nothing important)
         run: |
           echo "Copying world data from Google Drive..."
           rclone copy gdrive:Minecraft_Server_Data . -P
@@ -45,15 +45,13 @@ jobs:
           wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
           echo "Downloads Complete."
 
-      # ---- THE FINAL, SIMPLIFIED STEP YOU SUGGESTED ----
-      - name: 6. Inject Bot Token into DiscordSRV Config
+      # ---- THIS STEP IS NOW IN THE CORRECT ORDER ----
+      - name: 6. Inject Bot Token into Config
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
         run: |
-          echo "Injecting secret bot token into config..."
+          echo "Injecting secret bot token into config from repo..."
           CONFIG_FILE="plugins/DiscordSRV/config.yml"
-          
-          # This single command securely injects the one required secret.
           sed -i "s#BOT_TOKEN_HERE#${DISCORD_BOT_TOKEN}#g" $CONFIG_FILE
           echo "Bot token injected successfully."
 
