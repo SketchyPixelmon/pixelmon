@@ -1,43 +1,96 @@
-name: Minecraft Server
+name: Start Pixelmon Server
 
 on:
   workflow_dispatch:
 
 jobs:
-  server:
+  start-server:
     runs-on: ubuntu-latest
 
     env:
-      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
+      REFRESH_TOKEN: ${{ secrets.RCLONE_REFRESH_TOKEN }}
+      TOKEN_TYPE: ${{ secrets.RCLONE_TOKEN_TYPE }}
+      EXPIRY: ${{ secrets.RCLONE_EXPIRY }}
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
+    - name: 1. Checkout Repository Files
+      uses: actions/checkout@v4
 
-    - name: Setup Java
-      uses: actions/setup-java@v3
+    - name: 2. Setup Java 17 Environment
+      uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Install Rclone
+    - name: 3. Configure Rclone
       run: |
-        curl https://rclone.org/install.sh | sudo bash
+        echo "Setting up Rclone..."
+        sudo curl https://rclone.org/install.sh | sudo bash
         mkdir -p ~/.config/rclone
-        echo "${{ secrets.RCLONE_CONFIG }}" > ~/.config/rclone/rclone.conf
 
-    - name: Restore World Data
+        TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' \
+          "$ACCESS_TOKEN" \
+          "$TOKEN_TYPE" \
+          "$REFRESH_TOKEN" \
+          "$EXPIRY" \
+        )
+
+        echo "[gdrive]" > ~/.config/rclone/rclone.conf
+        echo "type = drive" >> ~/.config/rclone/rclone.conf
+        echo "scope = drive" >> ~/.config/rclone/rclone.conf
+        echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
+        echo "Rclone configured."
+
+    - name: 4. Restore World Data
       run: |
+        echo "Restoring world data from Google Drive..."
         rclone copy gdrive:Minecraft_Server_Data/world ./world -P
         rclone copy gdrive:Minecraft_Server_Data/plugins ./plugins -P
         rclone copy gdrive:Minecraft_Server_Data/usercache.json ./usercache.json
+        echo "World data restored."
 
-    - name: Start Server
-      run: ./start.sh
+    - name: 5. Download Server and Mods
+      run: |
+        mkdir -p mods
+        wget -q -O arclight-server.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/arclight.jar"
+        wget -q -O mods/pixelmon.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/Pixelmon-1.16.5-9.1.13-universal.jar"
+        wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
 
-    - name: Sync World Data Back
+    - name: 6. Start Server with Playit Tunnel
+      run: |
+        echo "Starting Minecraft server..."
+        java -Xmx6G -Xms6G -jar arclight-server.jar nogui &
+
+        echo "Waiting for Playit tunnel to initialize..."
+        sleep 30
+
+        echo "Extracting Playit tunnel IP..."
+        TUNNEL_IP=$(grep -oP 'playit.gg tunnel online: \K.*' logs/latest.log | tail -1)
+
+        if [ -n "$TUNNEL_IP" ]; then
+          echo "✅ Tunnel IP found: $TUNNEL_IP"
+          curl -H "Content-Type: application/json" \
+               -d "{\"content\": \"✅ **Pixelmon Server is Online!**\\nConnect via: \`$TUNNEL_IP\`\"}" \
+               "$DISCORD_WEBHOOK_URL"
+        else
+          echo "❌ Tunnel IP not found."
+          curl -H "Content-Type: application/json" \
+               -d "{\"content\": \"❌ **Tunnel failed to initialize.** Check logs.\"}" \
+               "$DISCORD_WEBHOOK_URL"
+        fi
+
+        wait
+
+    - name: 7. Sync World Data to Cloud
       if: always()
       run: |
+        echo "Server shutting down. Syncing world data..."
+        curl -H "Content-Type: application/json" \
+             -d '{"content": "❌ **Server is Offline.**\\nSaving world data now."}' \
+             "$DISCORD_WEBHOOK_URL"
         rclone sync ./world gdrive:Minecraft_Server_Data/world -P
         rclone sync ./plugins gdrive:Minecraft_Server_Data/plugins -P
         rclone copy ./usercache.json gdrive:Minecraft_Server_Data/usercache.json
+        echo "World data synced."
