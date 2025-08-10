@@ -16,7 +16,7 @@ jobs:
           distribution: 'temurin'
           java-version: '8'
 
-      - name: 3. Configure Rclone (The ENV File Method)
+      - name: 3. Configure Rclone
         env:
           ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
           REFRESH_TOKEN: ${{ secrets.RCLONE_REFRESH_TOKEN }}
@@ -26,46 +26,52 @@ jobs:
           echo "Setting up Rclone..."
           sudo curl https://rclone.org/install.sh | sudo bash
           mkdir -p ~/.config/rclone
-          
-          TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' \
-            "$ACCESS_TOKEN" \
-            "$TOKEN_TYPE" \
-            "$REFRESH_TOKEN" \
-            "$EXPIRY" \
-          )
-          
+          TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' "$ACCESS_TOKEN" "$TOKEN_TYPE" "$REFRESH_TOKEN" "$EXPIRY")
           echo "[gdrive]" > ~/.config/rclone/rclone.conf
-          echo "type = drive" >> ~/.config/rclone/rclone.conf
-          echo "scope = drive" >> ~/.config/rclone/rclone.conf
-          echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
-          echo "Rclone configured."
+          echo "type = drive" >> ~/.config/rclone/rclone.conf; echo "scope = drive" >> ~/.config/rclone/rclone.conf; echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
           
       - name: 4. Copy World Data from Cloud
-        # THIS IS THE FIX. 'copy' is non-destructive and will not delete other files.
         run: |
           echo "Copying world data from Google Drive..."
           rclone copy gdrive:Minecraft_Server_Data . -P
           echo "Copy complete."
+
       - name: 5. Download Server and Mods
         run: |
           echo "Creating mods folder..."
           mkdir -p mods
-          
-          echo "Downloading Arclight Server Jar..."
           wget -q -O arclight-server.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/arclight.jar"
-          
-          echo "Downloading Pixelmon Mod..."
           wget -q -O mods/pixelmon.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/Pixelmon-1.16.5-9.1.13-universal.jar"
-          echo "Downloading JEI Mod..."
           wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
-          
           echo "Downloads Complete."
-      - name: 6. Install JQ (for reading Ngrok IP)
+
+      - name: 6. Configure DiscordSRV with Secrets
+        env:
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID: ${{ vars.DISCORD_CHANNEL_ID }}
+        run: |
+          echo "Injecting secret token and channel ID into DiscordSRV config..."
+          CONFIG_FILE="plugins/DiscordSRV/config.yml"
+          
+          if [ -f "$CONFIG_FILE" ]; then
+            # First, replace the bot token placeholder
+            sed -i "s#BOT_TOKEN_HERE#${DISCORD_BOT_TOKEN}#g" $CONFIG_FILE
+            
+            # Second, replace the channel ID placeholder
+            sed -i "s#CHANNEL_ID_HERE#${DISCORD_CHANNEL_ID}#g" $CONFIG_FILE
+            
+            echo "DiscordSRV configuration injected successfully."
+          else
+            echo "ERROR: DiscordSRV config file not found at $CONFIG_FILE!"
+            exit 1
+          fi
+
+      - name: 7. Install JQ
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
           
-      - name: 7. Start Server and Tunnel
+      - name: 8. Start Server and Tunnel
         run: |
           echo "Starting Ngrok tunnel..."
           curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
@@ -74,7 +80,6 @@ jobs:
           sudo apt install ngrok
           ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
           ngrok tcp --region=in 25565 &> /dev/null &
-          echo "Waiting for Ngrok IP..."
           sleep 10
           export NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
           
@@ -86,13 +91,12 @@ jobs:
           echo "Starting Minecraft Server..."
           java -Xmx6G -Xms6G -jar arclight-server.jar nogui
           
-      - name: 8. (Shutdown) Sync World Data to Cloud
+      - name: 9. (Shutdown) Sync World Data to Cloud
         if: always()
         run: |
           echo "Server is shutting down. Syncing world to cloud..."
           curl -H "Content-Type: application/json" \
                -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' \
                ${{ secrets.DISCORD_WEBHOOK_URL }}
-          # The sync at the end is fine because the --include flags protect it.
           rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/GriefPreventionData/**" --include "/logs/**"
           echo "Sync to cloud complete."
