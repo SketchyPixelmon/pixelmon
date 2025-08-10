@@ -45,58 +45,41 @@ jobs:
           wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
           echo "Downloads Complete."
 
-      - name: 6. Inject Secrets into DiscordSRV Config
+      # ---- THE FINAL, SIMPLIFIED STEP YOU SUGGESTED ----
+      - name: 6. Inject Bot Token into DiscordSRV Config
         env:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-          DISCORD_GUILD_ID: ${{ vars.DISCORD_GUILD_ID }}
-          DISCORD_CHANNEL_ID: ${{ vars.DISCORD_CHANNEL_ID }}
-          DISCORD_CONSOLE_CHANNEL_ID: ${{ vars.DISCORD_CONSOLE_CHANNEL_ID }}
         run: |
-          echo "Injecting secrets into full DiscordSRV config template..."
+          echo "Injecting secret bot token into config..."
           CONFIG_FILE="plugins/DiscordSRV/config.yml"
           
-          if [ -f "$CONFIG_FILE" ]; then
-            sed -i "s#BOT_TOKEN_HERE#${DISCORD_BOT_TOKEN}#g" $CONFIG_FILE
-            sed -i "s#GUILD_ID_HERE#${DISCORD_GUILD_ID}#g" $CONFIG_FILE
-            sed -i "s#CHANNEL_ID_HERE#${DISCORD_CHANNEL_ID}#g" $CONFIG_FILE
-            sed -i "s#CONSOLE_CHANNEL_ID_HERE#${DISCORD_CONSOLE_CHANNEL_ID}#g" $CONFIG_FILE
-            echo "DiscordSRV configuration injected successfully."
-          else
-            echo "ERROR: DiscordSRV config file not found at $CONFIG_FILE!"
-            exit 1
-          fi
+          # This single command securely injects the one required secret.
+          sed -i "s#BOT_TOKEN_HERE#${DISCORD_BOT_TOKEN}#g" $CONFIG_FILE
+          echo "Bot token injected successfully."
 
+      # Steps below are unchanged
       - name: 7. Install JQ
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
+          sudo apt-get update; sudo apt-get install -y jq
           
       - name: 8. Start Server and Tunnel
         run: |
           echo "Starting Ngrok tunnel..."
           curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
           echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt update
-          sudo apt install ngrok
-          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
-          ngrok tcp --region=in 25565 &> /dev/null &
+          sudo apt update; sudo apt install ngrok
+          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}; ngrok tcp --region=in 25565 &> /dev/null &
           sleep 10
           export NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
           
-          echo "Sending IP to Discord..."
-          curl -H "Content-Type: application/json" \
-               -d '{"content": "✅ **Pixelmon Server is Online!**\nJoin at: `'"$NGROK_URL"'`"}' \
-               ${{ secrets.DISCORD_WEBHOOK_URL }}
-               
+          curl -H "Content-Type: application/json" -d '{"content": "✅ **Pixelmon Server is Online!**\nJoin at: `'"$NGROK_URL"'`"}' ${{ secrets.DISCORD_WEBHOOK_URL }}
           echo "Starting Minecraft Server..."
           java -Xmx6G -Xms6G -jar arclight-server.jar nogui
           
       - name: 9. (Shutdown) Sync World Data to Cloud
         if: always()
         run: |
-          echo "Server is shutting down. Syncing world to cloud..."
-          curl -H "Content-Type: application/json" \
-               -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' \
-               ${{ secrets.DISCORD_WEBHOOK_URL }}
+          echo "Server is shutting down..."
+          curl -H "Content-Type: application/json" -d '{"content": "❌ **Server is Offline.**\nSaving world data now."}' ${{ secrets.DISCORD_WEBHOOK_URL }}
           rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/GriefPreventionData/**" --include "/logs/**"
           echo "Sync to cloud complete."
