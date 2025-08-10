@@ -27,10 +27,14 @@ BotToken: "BOT_TOKEN_HERE"
 #
 # The first part of channel pairs is not the Discord channel name!
 # Run "/discord reload" after changing this option to apply
-Channels: {"global": "1404004163976958013"}
+BotToken: "BOT_TOKEN_HERE"
+
+# A list of channels that are used for different purposes.
+# The workflow will replace the channel ID placeholder.
+Channels: {"global": "CHANNEL_ID_HERE"}
 
 # Console channel numerical ID (NOT NAME), leave blank to disable the console channel all together
-DiscordConsoleChannelId: "1404014285683687444"
+DiscordConsoleChannelId: "CONSOLE_CHANNEL_ID_HERE"
 
 # Invitation link shown to players when using /discord and on the message shown to unlinked players when linking is enforced
 DiscordInviteLink: "https://discord.gg/changethisintheconfig.yml"
