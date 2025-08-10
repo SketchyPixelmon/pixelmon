@@ -29,6 +29,7 @@ BotToken: "BOT_TOKEN_HERE"
 # Run "/discord reload" after changing this option to apply
 # A list of channels that are used for different purposes.
 # The workflow will replace the channel ID placeholder.
+DiscordGuildID: "GUILD_ID_HERE"
 Channels: {"global": "CHANNEL_ID_HERE", "console": "CONSOLE_CHANNEL_ID_HERE"}
 
 
