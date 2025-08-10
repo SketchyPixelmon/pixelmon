@@ -29,8 +29,8 @@ BotToken: "BOT_TOKEN_HERE"
 # Run "/discord reload" after changing this option to apply
 # A list of channels that are used for different purposes.
 # The workflow will replace the channel ID placeholder.
-DiscordGuildID: "GUILD_ID_HERE"
-Channels: {"global": "CHANNEL_ID_HERE", "console": "CONSOLE_CHANNEL_ID_HERE"}
+DiscordGuildID: "1342840214573416458"
+Channels: {"global": "1404004163976958013", "console": "1404014285683687444"}
 
 
 # Invitation link shown to players when using /discord and on the message shown to unlinked players when linking is enforced
