@@ -5,6 +5,7 @@ usercache.json
 banned-ips.json
 banned-players.json
 *.log
+.env
 
 # Ignore server-generated cache
 arclight/
