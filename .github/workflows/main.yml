@@ -7,11 +7,13 @@ jobs:
     steps:
       - name: 1. Checkout Repository Files
         uses: actions/checkout@v4
+        
       - name: 2. Setup Java Environment
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '8'
+          
       - name: 3. Configure Rclone
         env:
           ACCESS_TOKEN: ${{ secrets.RCLONE_ACCESS_TOKEN }}
@@ -20,47 +22,51 @@ jobs:
           EXPIRY: ${{ secrets.RCLONE_EXPIRY }}
         run: |
           echo "Setting up Rclone..."
-          sudo curl https://rclone.org/install.sh | sudo bash
+          curl -s https://rclone.org/install.sh | bash
           mkdir -p ~/.config/rclone
           TOKEN_JSON=$(printf '{"access_token":"%s","token_type":"%s","refresh_token":"%s","expiry":"%s"}' "$ACCESS_TOKEN" "$TOKEN_TYPE" "$REFRESH_TOKEN" "$EXPIRY")
-          echo "[gdrive]" > ~/.config/rclone/rclone.conf
-          echo "type = drive" >> ~/.config/rclone/rclone.conf; echo "scope = drive" >> ~/.config/rclone/rclone.conf; echo "token = $TOKEN_JSON" >> ~/.config/rclone/rclone.conf
+          cat > ~/.config/rclone/rclone.conf << EOF
+          [gdrive]
+          type = drive
+          scope = drive
+          token = $TOKEN_JSON
+          EOF
           
-      - name: 4. Copy Plugins Folder from Cloud
+      - name: 4. Download Server Data from Cloud
         run: |
-          echo "Copying plugins folder from Google Drive..."
-          rclone copy gdrive:Minecraft_Server_Data/plugins . -P
-          echo "Plugins copy complete."
+          echo "Downloading server data from Google Drive..."
+          rclone copy gdrive:Minecraft_Server_Data . -P --exclude "logs/**"
+          echo "Server data downloaded."
+          
       - name: 5. Download Server and Mods
         run: |
-          echo "Creating mods folder..."
+          echo "Downloading server JAR and mods..."
           mkdir -p mods
           wget -q -O arclight-server.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/arclight.jar"
           wget -q -O mods/pixelmon.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/Pixelmon-1.16.5-9.1.13-universal.jar"
           wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
-          echo "Downloads Complete."
-      - name: 6. Install JQ
-        run: |
-          sudo apt-get update; sudo apt-get install -y jq
+          echo "Downloads complete."
           
-      - name: 7. Start Server and Tunnel
+      - name: 6. Setup Ngrok Tunnel
         run: |
-          echo "Starting Ngrok tunnel..."
+          echo "Setting up Ngrok tunnel..."
           curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
           echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-          sudo apt update; sudo apt install ngrok
-          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}; ngrok tcp --region=in 25565 &> /dev/null &
+          sudo apt update && sudo apt install -y ngrok jq
+          ngrok config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+          ngrok tcp --region=in 25565 &> /dev/null &
           sleep 10
           export NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          echo "Server available at: $NGROK_URL"
           
-          echo "Ngrok tunnel established at: $NGROK_URL"
-          echo "Starting Minecraft Server..."
+      - name: 7. Start Minecraft Server
+        run: |
+          echo "Starting Pixelmon Server..."
           java -Xmx6G -Xms6G -jar arclight-server.jar nogui
           
-      - name: 8. (Shutdown) Sync Data to Cloud
+      - name: 8. Sync Data to Cloud (On Shutdown)
         if: always()
         run: |
-          echo "Server is shutting down..."
-          echo "Syncing data to cloud..."
-          rclone sync . gdrive:Minecraft_Server_Data -P --include "/world/**" --include "/plugins/**" --include "/logs/**"
-          echo "Sync to cloud complete."
+          echo "Server shutting down - syncing data to cloud..."
+          rclone sync . gdrive:Minecraft_Server_Data -P --exclude "*.jar" --exclude "logs/**" --exclude ".git/**" --exclude ".github/**"
+          echo "Sync complete."
