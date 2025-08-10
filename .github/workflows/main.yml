@@ -45,17 +45,7 @@ jobs:
           wget -q -O mods/jei.jar "https://github.com/SketchyPixelmon/pixelmon/releases/download/v1.0.0/jei-1.16.5-7.7.1.153.jar"
           echo "Downloads Complete."
 
-      # ---- THIS STEP IS NOW IN THE CORRECT ORDER ----
-      - name: 6. Inject Bot Token into Config
-        env:
-          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-        run: |
-          echo "Injecting secret bot token into config from repo..."
-          CONFIG_FILE="plugins/DiscordSRV/config.yml"
-          sed -i "s#BOT_TOKEN_HERE#${DISCORD_BOT_TOKEN}#g" $CONFIG_FILE
-          echo "Bot token injected successfully."
 
-      # Steps below are unchanged
       - name: 7. Install JQ
         run: |
           sudo apt-get update; sudo apt-get install -y jq
