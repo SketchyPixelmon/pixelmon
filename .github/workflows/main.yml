@@ -1,13 +1,43 @@
--name: Start Cloudflare Tunnel
-  env:
-  TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-  run: |
-    echo "Starting Cloudflare Tunnel..."
-    cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN" > tunnel.log 2>&1 &
-    sleep 10
-    if ! grep -q "Connected" tunnel.log; then
-      echo "❌ Tunnel failed to start. Check tunnel.log for details."
-      cat tunnel.log
-      exit 1
-    fi
-    echo "✅ Tunnel started successfully."
+name: Start Pixelmon Server
+
+on:
+  workflow_dispatch:
+
+jobs:
+  start-server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Cloudflared
+        run: |
+          echo "Installing cloudflared..."
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb
+          echo "Cloudflared installed."
+
+      - name: Start Cloudflare Tunnel
+        env:
+          TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          echo "Starting Cloudflare Tunnel..."
+          cloudflared tunnel --no-autoupdate run --token "$TUNNEL_TOKEN" > tunnel.log 2>&1 &
+          sleep 10
+
+          echo "Checking tunnel status..."
+          if grep -q "Connected" tunnel.log; then
+            echo "✅ Tunnel started successfully."
+            HOSTNAME=$(grep -oP 'https://\K[^ ]+' tunnel.log | head -n 1)
+            curl -H "Content-Type: application/json" \
+                 -d '{"content": "✅ **Pixelmon Server Tunnel is Live!**\nConnect via: `'"$HOSTNAME"'`"}' \
+                 "$DISCORD_WEBHOOK_URL"
+          else
+            echo "❌ Tunnel failed to start. Here's the log:"
+            cat tunnel.log
+            curl -H "Content-Type: application/json" \
+                 -d '{"content": "❌ **Tunnel failed to start.** Check logs."}' \
+                 "$DISCORD_WEBHOOK_URL"
+            exit 1
+          fi
