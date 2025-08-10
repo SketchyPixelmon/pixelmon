@@ -63,6 +63,8 @@ jobs:
           else
             echo "Tunnel link not found."
             echo "Tunnel link not found." > tunnel.txt
+          fi
+
 
       - name: 8. Notify Discord with Tunnel Link
         run: |
