@@ -53,11 +53,8 @@ jobs:
 
       - name: 7. Extract Playit Tunnel Link
         run: |
-          echo "Waiting for Playit plugin to initialize..."
-          sleep 60
-      
-          echo "Checking logs/latest.log for tunnel link..."
-          tail -n 50 logs/latest.log
+          echo "Waiting for server to fully start..."
+          timeout 180 bash -c 'until grep -q "Done (" logs/latest.log; do sleep 5; done'
       
           echo "Extracting tunnel link from logs..."
           TUNNEL_LINK=$(grep -oE 'https://playit.gg/mc/[a-zA-Z0-9\-]+' logs/latest.log | tail -1)
@@ -69,7 +66,6 @@ jobs:
             echo "Tunnel link not found."
             echo "Tunnel link not found." > tunnel.txt
           fi
-
 
 
       - name: 8. Notify Discord with Tunnel Link
